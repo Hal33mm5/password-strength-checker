@@ -1,46 +1,75 @@
 import re
+import os
+import sys
 
-# Load rockyou once (faster)
-def load_common_passwords():
-    try:
-        with open("rockyou.txt", "r", encoding="latin-1") as f:
-            return set(line.strip() for line in f)
-    except:
-        print("Warning: rockyou.txt not found.")
+WORDLIST_PATH = "rockyou.txt"
+
+
+# -----------------------------
+# Load common passwords (fast)
+# -----------------------------
+def load_common_passwords(path):
+    if not os.path.exists(path):
+        print("[!] Warning: rockyou.txt not found. Skipping dictionary check.")
         return set()
 
-common_passwords = load_common_passwords()
+    try:
+        with open(path, "r", encoding="latin-1") as f:
+            return set(line.strip() for line in f)
+    except Exception as e:
+        print(f"[!] Error loading wordlist: {e}")
+        return set()
 
 
-def is_common_password(password):
-    return password in common_passwords
+COMMON_PASSWORDS = load_common_passwords(WORDLIST_PATH)
 
 
-def check_password_strength(password):
-    if is_common_password(password):
-        return "Very Weak (Common Password)"
+# -----------------------------
+# Strength Evaluation
+# -----------------------------
+def evaluate_password(password):
+    if password in COMMON_PASSWORDS:
+        return {
+            "strength": "Very Weak",
+            "reason": "Password found in common password list",
+            "score": 0
+        }
 
     score = 0
+    feedback = []
 
-    if len(password) >= 12:
+    length = len(password)
+
+    # Length scoring
+    if length >= 12:
         score += 2
-    elif len(password) >= 8:
+    elif length >= 8:
         score += 1
+    else:
+        feedback.append("Use at least 8 characters")
 
-    has_upper = bool(re.search(r"[A-Z]", password))
-    has_lower = bool(re.search(r"[a-z]", password))
-    has_digit = bool(re.search(r"[0-9]", password))
-    has_special = bool(re.search(r"[!@#$%^&*(),.?\":{}|<>]", password))
+    # Character checks
+    if re.search(r"[A-Z]", password):
+        score += 1
+    else:
+        feedback.append("Add uppercase letters")
 
-    if has_upper:
+    if re.search(r"[a-z]", password):
         score += 1
-    if has_lower:
-        score += 1
-    if has_digit:
-        score += 1
-    if has_special:
-        score += 1
+    else:
+        feedback.append("Add lowercase letters")
 
+    if re.search(r"\d", password):
+        score += 1
+    else:
+        feedback.append("Add numbers")
+
+    if re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        score += 1
+    else:
+        feedback.append("Add special characters")
+
+    # Final classification
     if score <= 2:
         strength = "Weak"
     elif score <= 4:
@@ -48,34 +77,41 @@ def check_password_strength(password):
     else:
         strength = "Strong"
 
-    return strength, has_upper, has_lower, has_digit, has_special
+    return {
+        "strength": strength,
+        "score": score,
+        "feedback": feedback
+    }
 
 
-def give_feedback(password, has_upper, has_lower, has_digit, has_special):
-    print("\nSuggestions to improve your password:")
+# -----------------------------
+# Display Result
+# -----------------------------
+def display_result(result):
+    print("\n[+] Password Strength:", result["strength"])
+    print("[+] Score:", result.get("score", 0))
 
-    if len(password) < 8:
-        print("- Use at least 8 characters")
-    if not has_upper:
-        print("- Add uppercase letters (A-Z)")
-    if not has_lower:
-        print("- Add lowercase letters (a-z)")
-    if not has_digit:
-        print("- Add numbers (0-9)")
-    if not has_special:
-        print("- Add special characters (!@#$ etc.)")
+    if "reason" in result:
+        print("[!] Reason:", result["reason"])
+
+    if result.get("feedback"):
+        print("\nSuggestions:")
+        for item in result["feedback"]:
+            print(f"- {item}")
 
 
+# -----------------------------
 # Main
-password = input("Enter password: ")
+# -----------------------------
+def main():
+    if len(sys.argv) > 1:
+        password = sys.argv[1]
+    else:
+        password = input("Enter password: ")
 
-result = check_password_strength(password)
+    result = evaluate_password(password)
+    display_result(result)
 
-if isinstance(result, str):
-    print("Strength:", result)
-else:
-    strength, has_upper, has_lower, has_digit, has_special = result
-    print("Strength:", strength)
 
-    if strength != "Strong":
-        give_feedback(password, has_upper, has_lower, has_digit, has_special)
+if __name__ == "__main__":
+    main()
